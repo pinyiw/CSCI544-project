@@ -5,7 +5,7 @@ from pathlib import Path
 acos_base_dir = (Path(__name__).parent.parent.parent / 'dataset/ACOS').resolve()
 
 laptop_acos_dir = acos_base_dir / 'Laptop-ACOS'
-restaruant_acos_dir = acos_base_dir / 'Restaurant-ACOS'
+restaurant_acos_dir = acos_base_dir / 'Restaurant-ACOS'
 
 laptop_acos_train_file = laptop_acos_dir / 'laptop_quad_train.tsv'
 laptop_acos_dev_file = laptop_acos_dir / 'laptop_quad_dev.tsv'
