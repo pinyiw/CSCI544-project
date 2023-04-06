@@ -46,8 +46,28 @@ def extract_sentences(filename):
 #        "The food quality is criticized.", "Portion sizes are small.", "Service is poor.", \
 #        "Prices of the restaurant is high."]
 
+openai.api_key = ""
 model_zs = SummaCZS(granularity="sentence", model_name="vitc", device="cuda") # If you have a GPU: switch to: device="cuda"
 model_conv = SummaCConv(models=["vitc"], bins='percentile', granularity="sentence", nli_labels="e", device="cuda", start_file="default", agg="mean")
+
+def split_and_rephrase(sum):
+    prompt = "Split and rephrase the following sentences into simple propositions: " + sum
+    # print(prompt)
+    # resp = openai.Completion.create(
+    #     model="text-davinci-003",
+    #     prompt=prompt,
+    #     temperature=0,
+    #     max_tokens=1000
+    # )
+    # pred_str = resp['choices'][0]['text']
+    output = openai.ChatCompletion.create(
+            model='gpt-3.5-turbo',
+            # roles: system, user, assistant
+            # System: (BUGGED) provide overarching context to the system
+            messages=[{"role": "user", "content": prompt}]
+        )
+    pred_str = output['choices'][0]['message']['content']
+    return pred_str
 
 def compute_faithfulness(reviews, summary):
     for sum in summary:
