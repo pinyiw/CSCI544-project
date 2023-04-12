@@ -22,6 +22,7 @@ nltk.download('stopwords')
 from summac.model_summac import SummaCZS, SummaCConv
 import random
 from nltk.corpus import stopwords
+import json
 
 def extract_sentences(filename):
     doc = []
@@ -51,79 +52,67 @@ model_zs = SummaCZS(granularity="sentence", model_name="vitc", device="cuda") # 
 model_conv = SummaCConv(models=["vitc"], bins='percentile', granularity="sentence", nli_labels="e", device="cuda", start_file="default", agg="mean")
 
 def split_and_rephrase(sum):
-    prompt = "Split and rephrase the following sentences into simple propositions: " + sum
+    sum1 = "The restaurant reviews cover a range of opinions on food quality, with many customers raving about the food. Several reviews praise the presentation of the food, and others mention specific dishes that were particularly good. There are also some negative reviews, with complaints about inconsistent quality, downsized portions, high prices, and poor service. However, overall, the majority of reviews are positive, with many customers recommending the restaurant and its food. The reviews cover a range of cuisines, including Mexican, Indian, and sushi, with some specific dishes mentioned as standouts."
+    sum1_rephrased = "The presentation of the food is praised .\n Food quality is inconsistent .\n Portions are downsized .\n Prices are high .\n Service is poor .\n The restaurant and its food are recommended .\n Mexican food is good .\n Indian food is good .\n Sushi is good ."
+    sum2 = "The restaurant reviews cover a variety of food types and service experiences. Some of the positive reviews include comments about the best tuna ever had, great value sushi with high quality, superb caesar salad, and the best crab cakes in town. On the other hand, some of the negative reviews mention poor customer service, poor quality pizza, and overpriced food. Additionally, some reviewers mention specific dishes they enjoyed such as the seabass on lobster risotto, honey walnut prawns, asparagus, and lobster 3 ways. Overall, there are mixed reviews, with some praising the food quality while others criticize the service and value."
+    sum2_rephrased = "The tuna is the best that customers ever had .\n Sushi is of great value and high quality .\n Caesar salad is superb .\n Crab cakes are the best in town .\n Customer service is poor .\n Pizza is of poor quality .\n Food is overpriced .\n Customers enjoyed the seabass on lobster risotto .\n Customers enjoyed honey walnut prawns .\n Customers enjoyed asparagus .\n Customers enjoyed lobster 3 ways ."
+    prompt = "Split and rephrase the following sentences into simple propositions: "
+    # few shot learning
+    input = prompt + sum1 + "\n Output: " + sum1_rephrased + "\n" + prompt + sum2 + "\n Output: " + sum2_rephrased + "\n" + prompt + sum + "\n Output: "
     # print(prompt)
-    # resp = openai.Completion.create(
-    #     model="text-davinci-003",
-    #     prompt=prompt,
-    #     temperature=0,
-    #     max_tokens=1000
-    # )
-    # pred_str = resp['choices'][0]['text']
-    output = openai.ChatCompletion.create(
-            model='gpt-3.5-turbo',
-            # roles: system, user, assistant
-            # System: (BUGGED) provide overarching context to the system
-            messages=[{"role": "user", "content": prompt}]
-        )
-    pred_str = output['choices'][0]['message']['content']
+    resp = openai.Completion.create(
+        model="text-davinci-003",
+        prompt=input,
+        temperature=0,
+        max_tokens=1000
+    )
+    pred_str = resp['choices'][0]['text']
+    # output = openai.ChatCompletion.create(
+    #         model='gpt-3.5-turbo',
+    #         # roles: system, user, assistant
+    #         # System: (BUGGED) provide overarching context to the system
+    #         messages=[{"role": "user", "content": prompt}]
+    #     )
+    # pred_str = output['choices'][0]['message']['content']
     return pred_str
 
-def compute_faithfulness(reviews, summary):
+def compute_faithfulness(reviews, summary, t):
+    avg_support = 0
     for sum in summary:
         support = 0
         # reviews_batch = random.sample(reviews, 20)
         for review in reviews:
             score_zs = model_zs.score([review], [sum])['scores'][0]
-            if score_zs > 0.2:
+            # if score_zs > 0.2:
+            if score_zs > t:
                 support += 1
+        avg_support += support
+
         print("summary:", sum)
         print("support:", support)
         print("=====")
 
+    avg_support /= len(summary)
+    return avg_support
+
 def compute_factuality(reviews, summary):
+    avg_topscore = 0
     for sum in summary:
         top_score = 0
         # reviews_batch = random.sample(reviews, 20)
         for review in reviews:
             score_zs = model_zs.score([review], [sum])['scores'][0]
             top_score = max(top_score, score_zs)
+        avg_topscore += top_score
+
         print("summary:", sum)
         print("top score:", top_score)
         print("=====")
 
-# # remove stop words
-# stop_words = set(stopwords.words('english'))
-# sums = []
-# sum1 = []
-# with open("yelp-1-sum") as fp:
-#     for line in fp:
-#         s = line.rstrip().split("\n")[0]
-#         s = s.rstrip().split(" ")
-#         for word in s:
-#             if not word in stop_words:
-#                 sum1.append(word)
-# sums.append(sum1)
-# sum2 = []
-# with open("yelp-2-sum") as fp:
-#     for line in fp:
-#         s = line.rstrip().split("\n")[0]
-#         s = s.rstrip().split(" ")
-#         for word in s:
-#             if not word in stop_words:
-#                 sum2.append(word)
-# sums.append(sum2)
-# sum3 = []
-# with open("yelp-3-sum") as fp:
-#     for line in fp:
-#         s = line.rstrip().split("\n")[0]
-#         s = s.rstrip().split(" ")
-#         for word in s:
-#             if not word in stop_words:
-#                 sum3.append(word)
-# sums.append(sum3)
+    avg_topscore /= len(summary)
+    return avg_topscore
 
-def compute_genericity(summaries, summary):
+def compute_genericity(summary, summaries):
     summaries = [set(sum) for sum in summaries]
     idf = 0
     for word in summary:
@@ -132,12 +121,68 @@ def compute_genericity(summaries, summary):
             count += (word in sum)
         idf += len(summaries) / count
     idf /= len(summary)
+
+    return idf
+
+# json file have the following format:
+# [
+#   [
+#     {'group_name': ..., 'reviews': [str1, str2, ...], 'summary': str}, 
+#     {...}, 
+#   ], 
+#   [...],
+# ]
+with open('input.json', 'r') as openfile:
+    input = json.load(openfile)
+    
+# split and rephrase
+for res in input:
+    for aspect in res:
+        aspect['summary_rephrased'] = split_and_rephrase(aspect['summary']).split("\n")
+        aspect['summary_rephrased'] = [x for x in aspect['summary_rephrased'] if len(x) > 0]
+        print(aspect['summary'])
+        print(aspect['summary_rephrased'])
+        print("=====")
+        
+# faithfulness
+for res in input:
+    # merge reviews and summary of different aspects
+    reviews = []
+    sum = []
+    for aspect in res:
+        reviews += aspect['reviews']
+        sum += aspect['summary_rephrased']
+    avg_support = compute_faithfulness(reviews, sum, 0.2)
+    print("Average support:", avg_support)
+    print("=====")
+
+# factuality
+for res in input:
+    # merge reviews and summary of different aspects
+    reviews = []
+    sum = []
+    for aspect in res:
+        reviews += aspect['reviews']
+        sum += aspect['summary_rephrased']
+    avg_support = compute_factuality(reviews, sum)
+    print("Average top score:", avg_support)
+    print("=====")
+    
+# genericity
+stop_words = set(stopwords.words('english'))
+sums = []
+for res in input:
+    sum = []
+    sum_words = []
+    # merge sum from different aspects
+    for aspect in res:
+        sum += aspect['summary_rephrased']
+    # convert sum to word level and remove stop words
+    for s in sum:
+        s = s.split(" ")
+        s = [word for word in s if word not in stop_words]
+        sum_words += s
+    sums.append(sum_words)
+for sum in sums:
+    idf = compute_genericity(sum, sums)
     print("genericity:", idf)
-
-# compute_faithfulness(doc, sum)
-
-# compute_factuality(doc, sum)
-
-# print(compute_genericity(sums, sums[0]))
-# print(compute_genericity(sums, sums[1]))
-# print(compute_genericity(sums, sums[2]))
