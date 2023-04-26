@@ -15,8 +15,8 @@ restaurant_acos_dir = acos_base_dir / 'Restaurant-ACOS'
 laptop_acos_train_file = laptop_acos_dir / 'laptop_quad_train.tsv'
 laptop_acos_dev_file = laptop_acos_dir / 'laptop_quad_dev.tsv'
 
-restaurant_acos_train_file = restaurant_acos_dir / 'restaurant_quad_train.tsv'
-restaurant_acos_dev_file = restaurant_acos_dir / 'restaurant_quad_dev.tsv'
+restaurant_acos_train_file = restaurant_acos_dir / 'rest16_quad_train.tsv'
+restaurant_acos_dev_file = restaurant_acos_dir / 'rest16_quad_dev.tsv'
 
 
 def get_words_from_indices_str(review: list[str], indices_str: str) -> Optional[list[str]]:
@@ -59,14 +59,14 @@ class ACOSQuad:
         # A
         aspect_indices = find_sublist_indices(review_words, self.aspect)
         if aspect_indices is None:
-            raise ValueError(f"Aspect not found in review: {self.aspect} {acos_pred.review}")
+            raise ValueError(f"Aspect not found in review: {self.aspect} {review}")
         aspect_str = f'{aspect_indices[0]},{aspect_indices[1]}'
         # C
         category_str = self.category
         # O
         opinion_indices = find_sublist_indices(review_words, self.opinion)
         if opinion_indices is None:
-            raise ValueError(f"Opinion not found in review: {self.opinion} {acos_pred.review}")
+            raise ValueError(f"Opinion not found in review: {self.opinion} {review}")
         opinion_str = f'{opinion_indices[0]},{opinion_indices[1]}'
         # S
         sent_to_idx = {'negative': 0, 'neutral': 1, 'positive': 2}
@@ -203,7 +203,7 @@ def openai_pred_acos(acos_reviews: list[ACOSReview], prompt_review_examples: lis
         #     raise
 
         # sleep for 60s to avoid rate limit
-        if i % 60 == 0:
+        if i != 0 and i % 60 == 0:
             print(f"Completed {i} reviews")
             time.sleep(60)
     print(f"Total tokens used: {total_tokens_used:,d}")
